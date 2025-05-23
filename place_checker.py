@@ -5,6 +5,7 @@ from geopy.exc import GeocoderTimedOut
 import math
 import pandas as pd
 import requests
+#from datetime import datetime
 import pytz
 
 def save_user_query_to_db(user_input: str, db_path: str = "dbaze_re_placename.db"):
@@ -23,7 +24,6 @@ def save_user_query_to_db(user_input: str, db_path: str = "dbaze_re_placename.db
         """, (user_input.strip(), datetime.datetime.now().isoformat()))
         conn.commit()
 
-
 def check_place_exists(user_input: str, db_path: str = "gyvenamosios_vietoves.db") -> bool:
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -32,7 +32,6 @@ def check_place_exists(user_input: str, db_path: str = "gyvenamosios_vietoves.db
         """, (user_input.strip(),))
         result = cursor.fetchone()
         return result[0] > 0
-    
 
 def get_lat_long(address):
     geolocator = Nominatim(user_agent="my_geocoder")
@@ -41,12 +40,11 @@ def get_lat_long(address):
         if location:
             ilguma = location.latitude
             platuma = location.longitude
-            print('inside function', ilguma, platuma)
             return (ilguma, platuma)
         else:
             return (None, None)
     except GeocoderTimedOut:
-        return (None, None)
+        return None
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371  # Earth radius in kilometers
@@ -61,6 +59,7 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c  # in kilometers
 
 def find_nearest_ams_station(user_lat, user_lon, db_path="meteo_stations.db"):
+  
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT code, latitude, longitude FROM stations")
@@ -77,20 +76,20 @@ def find_nearest_ams_station(user_lat, user_lon, db_path="meteo_stations.db"):
 
     return nearest_station, min_distance
 
-
-
 def fetch_and_save_forecast(place_name: str, db_file: str):
-
     url = f"https://api.meteo.lt/v1/places/{place_name}/forecasts/long-term"
     response = requests.get(url)
     response.raise_for_status()
     data = response.json()
     forecasts = data['forecastTimestamps']
     df = pd.DataFrame(forecasts)
+
+    # Convert forecastTimeUtc to datetime and localize
     df['forecastTimeUtc'] = pd.to_datetime(df['forecastTimeUtc'], utc=True)
     df.set_index('forecastTimeUtc', inplace=True)
+
+    # Optionally localize to Lithuanian time (Europe/Vilnius)
     df.index = df.index.tz_convert(f'Europe/Vilnius')
     with sqlite3.connect(db_file) as conn:
-        df.to_sql(f"{place_name}forecast", conn, if_exists="replace")
-
+        df.to_sql(f"{place_name}forecast", conn, if_exists="replace")  # pritaikyti visiems citys for_city_end_date.db table name.
     return df
